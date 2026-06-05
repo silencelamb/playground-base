@@ -22,6 +22,5 @@ include(${PROJECT_SOURCE_DIR}/cmake/libraries/libcuda.cmake)
 
 find_package(OpenBLAS CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
-find_package(NvidiaCutlass CONFIG REQUIRED)
 
 add_subdirectory(src)

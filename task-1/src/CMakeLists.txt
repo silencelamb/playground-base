@@ -57,12 +57,10 @@ target_include_directories(
 )
 
 target_link_libraries(
-    ${TARGET_NAME} PRIVATE 
-    CUDA::cudart 
-    CUDA::cublas
+    ${TARGET_NAME} PRIVATE
+    CUDA::cudart
     OpenBLAS::OpenBLAS
     cxxopts::cxxopts
-    nvidia::cutlass::cutlass
 )
 
 set(TARGET_BIN_OUTPUT_NAME "${TARGET_NAME}_${TEST_DATA_TYPE}_v${MATMUL_VERSION}")

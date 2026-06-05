@@ -9,7 +9,7 @@ set -euo pipefail
 
 # -------- defaults (can be overridden by env or CLI) --------
 FLOAT="${FLOAT:-f32}"
-VER="${VER:-1}"
+VER="${VER:-0}"   # 0 = cBLAS correctness reference (always present); your kernels start at v1
 
 # -------- tiny args parser (flags override env) -------------
 cmd="${1:-help}"
@@ -126,9 +126,9 @@ Parameters:
 
 Examples:
   ./task1.sh build --float f16 --ver 2
-  FLOAT=f32 VER=1 ./task1.sh run
+  FLOAT=f16 VER=0 ./task1.sh run
   ./task1.sh debug --float f16 --ver 3
-  ./task1.sh profile --float f32 --ver 1
+  ./task1.sh profile --float f16 --ver 2
 EOF
 }
 

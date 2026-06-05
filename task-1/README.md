@@ -6,7 +6,7 @@ High performance gemm implementation on Nvidia A100 ([internal feishu doc](https
 
 Implement a high performance gemm (General Matrix Multiply) function with CUDA on Nvidia A100 for float32 and float16 data types.
 
-The implementation should be able to achieve at least **90%** of the performance of cuBLAS, with the given benchmarking structure.
+The goal is to push performance as high as possible toward the A100 hardware peak (fp16 **312 TFLOPS** on Tensor Cores), using the given benchmarking structure for scoring. There is no library baseline to match or beat — the hardware peak is the only target.
 
 ## 2. Quick Start with Bash Script
 
@@ -17,10 +17,10 @@ We provide a convenient bash script `task1.sh` that offers the same operations a
 ./task1.sh help
 
 # 1) Build code with specified FLOAT type and VERSION
-./task1.sh build --float f32 --ver 1
+./task1.sh build --float f32 --ver 0
 
 # 2) Build and run code, automatically save logs
-./task1.sh run --float f16 --ver 1
+./task1.sh run --float f16 --ver 0
 
 # 3) Build with debug symbols (RelWithDebInfo)
 ./task1.sh debug --float f32 --ver 2
@@ -41,9 +41,9 @@ We provide a convenient bash script `task1.sh` that offers the same operations a
 - **Nsight Compute Integration**: Profile reports saved to `logs/profiles/` with timestamp
 - **Version-Specific File Inclusion**: Only includes source files for the current version to avoid conflicts
 
-## 3. Benchmark cBlas and cuBlas
+## 3. Benchmark cBLAS (correctness reference)
 
-Build example matmul with the following commands (`v0 -> cblas`; `v1 -> cublas`):
+`v0 -> cBLAS` (CPU). It is the **correctness ground truth** only (used to compute Average Error); it is far too slow to be a performance reference. Your own kernels start at `v1`.
 
 ### Using build script directly:
 ```bash
@@ -51,10 +51,6 @@ Build example matmul with the following commands (`v0 -> cblas`; `v1 -> cublas`)
 bash scripts/build-task1.sh -f32 -v0
 # Build gemm implemented with CBLAS (CPU) under float16:
 bash scripts/build-task1.sh -f16 -v0
-# Build gemm implemented with cublas (CUDA) under float32:
-bash scripts/build-task1.sh -f32 -v1
-# Build gemm implemented with cublas (CUDA) under float16:
-bash scripts/build-task1.sh -f16 -v1
 ```
 
 ### Using task1.sh script (Recommended):
@@ -63,10 +59,6 @@ bash scripts/build-task1.sh -f16 -v1
 ./task1.sh build --float f32 --ver 0
 # Build gemm implemented with CBLAS (CPU) under float16:
 ./task1.sh build --float f16 --ver 0
-# Build gemm implemented with cublas (CUDA) under float32:
-./task1.sh build --float f32 --ver 1
-# Build gemm implemented with cublas (CUDA) under float16:
-./task1.sh build --float f16 --ver 1
 ```
 
 For more compile options, see "[./scripts/build-task1.sh](../scripts/build-task1.sh)" or run `./task1.sh help`.
@@ -96,8 +88,8 @@ You can set `m`, `n`, `k`, `n_warmup` and `n_test` by passing arguments to binar
 ./task1.sh run --float f16 --ver 0
 
 # Run with different configurations
-./task1.sh run --float f32 --ver 1
-./task1.sh run --float f16 --ver 1
+./task1.sh run --float f32 --ver 0
+./task1.sh run --float f16 --ver 2
 ```
 
 The run results will be automatically saved to `logs/` directory with timestamp and version information.
@@ -123,7 +115,7 @@ PLAYGROUND_MATMUL_DEC(float16_t, 2, A, B, C, M, N, K)
 ```
 
 > 💡**Note**:  
-> Do not use version `0` and `1` because they are for cblas and cublas respectively.
+> Do not use version `0` — it is cBLAS (CPU), the correctness reference. Use version `1`, `2`, … for your own kernels.
 
 Now you are able to build a new binary `task1_float16_v2` to with the following command:
 
@@ -171,23 +163,15 @@ A `.ncu-rep` file will be generated in the `logs/profiles/` directory with times
 
 ![ncu-example](../docs/imgs/ncu-example.png)
 
-## 5. Example Target Results
+## 5. Reference Numbers
 
-### CUDA Core(FP32)
-| Version | v0 | v1 | v2 | v3 | v4 | cuBLAS | Theory Peak |
-| --- | --- | --- | --- | --- | --- | --- | --- | 
-| Average error | 0.0115 | 0.0115 | 0.0115 | 0.0116 | 0.0116 | / | / |
-| TFLOPS | 2.41 | 3.85 | 9.24 | 15.15 | 17.16 | 18.38 | 19.5 |
+A100 hardware peaks — the **only** targets (there is no library baseline to compare against):
 
-### Tensor Core(FP16)
+| | CUDA Core (FP32) | Tensor Core (FP16) |
+| --- | --- | --- |
+| Theory Peak (TFLOPS) | 19.5 | 312 |
 
-| Version | v0 | v1 | v2 |  v3 |v4 | cuBLAS | Theory Peak |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Average error | 0.0117 | 0.0117 | 0.0117 | 0.0117 | 0.0019 |0.0153 | / |
-| TFLOPS | 18.09 | 53.05 |103.05 |159.35 | 213.12 |222.11 | 312 |
-
-> 💡**Note**:  
-> Some card can reach above 250 TFLOPS using cuBLAS fp16. The target is the 90% of cuBLAS on the same card
+> The goal is to approach the hardware peak. `v0` (cBLAS, CPU) exists only for correctness checking and is orders of magnitude too slow to be a performance reference.
 
 ## 6. References
 See also: [feishu doc: cuda学习资料](https://aicarrier.feishu.cn/wiki/SFdnw61vHi1AfRkeJVecgMjBnrc)
@@ -242,6 +226,5 @@ Asynchronous data copy:
 ### For Further Study
 
 - [基于 CUTE 的 GEMM 优化【1】—— Baseline 实现](https://zhuanlan.zhihu.com/p/695063154)
-- [基于 CUTE 的 GEMM 优化【2】—— 高效 GEMM 实现，超越 Cublas 20%](https://zhuanlan.zhihu.com/p/696028389)
 - [cute系列讲解](https://www.zhihu.com/people/reed-84-49/posts)
 
