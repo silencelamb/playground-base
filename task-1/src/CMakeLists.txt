@@ -14,14 +14,40 @@ endif()
 set(CXX_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 set(CUDA_SOURCES "")
 
-# Include ALL version files for the specified data type
-# This is necessary because the main function may call different versions
-file(GLOB VERSION_CXX_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${DATA_TYPE_DIR}/*.cpp")
-file(GLOB VERSION_CUDA_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${DATA_TYPE_DIR}/*.cu")
+# Compile ONLY the files this binary actually links:
+#   main.cpp (above) + the cBLAS reference v0 (TestData uses it as ground truth)
+#   + the single selected version (MATMUL_VERSION, the kernel under test).
+# main.cpp only ever references matmul<DataType, MATMUL_VERSION> and the v0
+# reference, so compiling every sibling version (the old `file(GLOB *)`) was pure
+# overhead AND made one broken file block all versions. Selective compile makes
+# version builds / small edits fast and isolates broken siblings.
+# NOTE: CMake re-globs only on (re)configure; build-task1.sh reconfigures when
+#   --ver changes. If you add a 2nd file to the *same* version, reconfigure once
+#   (touch this CMakeLists or `./task1.sh clean`).
+set(_VDIR "${CMAKE_CURRENT_SOURCE_DIR}/${DATA_TYPE_DIR}")
+# v0 = cBLAS ground-truth reference (always linked, used by TestData).
+file(GLOB V0_FILES  "${_VDIR}/*_v0_*.cpp" "${_VDIR}/*_v0.cpp"
+                    "${_VDIR}/*_v0_*.cu"  "${_VDIR}/*_v0.cu")
+# Selected version. Match `_vN_` and `_vN.` so e.g. v2 never matches v20/v22.
+file(GLOB SEL_FILES "${_VDIR}/*_v${MATMUL_VERSION}_*.cpp" "${_VDIR}/*_v${MATMUL_VERSION}.cpp"
+                    "${_VDIR}/*_v${MATMUL_VERSION}_*.cu"  "${_VDIR}/*_v${MATMUL_VERSION}.cu")
 
-# Combine all version-specific files
-list(APPEND CXX_SOURCES ${VERSION_CXX_FILES})
-list(APPEND CUDA_SOURCES ${VERSION_CUDA_FILES})
+if(NOT SEL_FILES AND NOT MATMUL_VERSION EQUAL 0)
+    message(FATAL_ERROR
+        "No source for ${DATA_TYPE_DIR} version ${MATMUL_VERSION} "
+        "(expected e.g. matmul_..._v${MATMUL_VERSION}_*.cu). "
+        "Create the file and name it with _v${MATMUL_VERSION}_.")
+endif()
+
+set(SELECTED_FILES ${V0_FILES} ${SEL_FILES})
+list(REMOVE_DUPLICATES SELECTED_FILES)   # MATMUL_VERSION==0 -> v0 only, once
+foreach(_f ${SELECTED_FILES})
+    if(_f MATCHES "\\.cu$")
+        list(APPEND CUDA_SOURCES ${_f})
+    else()
+        list(APPEND CXX_SOURCES ${_f})
+    endif()
+endforeach()
 
 # Log included files for debugging
 log_info("Including source files for ${TEST_DATA_TYPE} version ${MATMUL_VERSION}:")

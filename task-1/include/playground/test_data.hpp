@@ -145,20 +145,41 @@ public:
     [[nodiscard]]
     auto calculateAvgErr() -> float32_t
     {
-        float32_t gap = 0.0;
-        float32_t errSum = 0.0;
-        float32_t avgErr = 0.0;
+        // Mean relative error: mean(|GT - C| / |GT|).
+        //  - A broken kernel that writes inf/nan into C is still caught (fails).
+        //  - Relative error is *undefined* where the reference GT is exactly 0
+        //    (rare random cancellation, especially after rounding to fp16).
+        //    Such terms are skipped instead of producing inf and aborting the
+        //    whole run. With no zero reference this yields the identical number
+        //    as the previous `errSum / _GT.size()` formula.
+        float32_t errSum = 0.0F;
+        size_t validCount = 0;
 
         for (size_t i = 0; i < _GT.size(); ++i) {
-            gap = float32_t(_GT[i]) - float32_t(_C[i]);
-            errSum += ::std::abs(gap / float32_t(_GT[i]));
-            PLAYGROUND_CHECK(!::std::isinf(errSum));
-            PLAYGROUND_CHECK(!::std::isnan(errSum));
+            const float32_t gt = float32_t(_GT[i]);
+            const float32_t c = float32_t(_C[i]);
+            // Genuine kernel failure (inf/nan output) -> still fail loudly.
+            PLAYGROUND_CHECK(!::std::isinf(c));
+            PLAYGROUND_CHECK(!::std::isnan(c));
+            // Skip terms whose relative error is undefined (reference == 0).
+            if (gt == 0.0F) {
+                continue;
+            }
+            errSum += ::std::abs((gt - c) / gt);
+            ++validCount;
         }
 
-        avgErr = errSum / float32_t(_GT.size());
+        // Pathological (all references zero/invalid) -> fail, don't report 0.
+        PLAYGROUND_CHECK(validCount > 0);
 
-        return avgErr;
+        if (validCount < _GT.size()) {
+            ::std::cerr << ::std::format(
+                "[Playground] note: skipped {} zero-reference element(s) in "
+                "error calc\n",
+                _GT.size() - validCount);
+        }
+
+        return errSum / float32_t(validCount);
     }
 
     void calculateGroundTruth()
