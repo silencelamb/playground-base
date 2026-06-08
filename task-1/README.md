@@ -39,11 +39,13 @@ We provide a convenient bash script `task1.sh` that offers the same operations a
 - **Automatic Logging**: Run results are saved to `logs/` directory with timestamp and version info
 - **TFLOPS and Error Tracking**: Captures performance metrics and error rates automatically
 - **Nsight Compute Integration**: Profile reports saved to `logs/profiles/` with timestamp
-- **Version-Specific File Inclusion**: Only includes source files for the current version to avoid conflicts
+- **Selective, fast compile**: only `main` + `v0` (cBLAS reference) + the file for the selected `--ver N` are compiled — not every version in the folder. Builds stay fast as versions pile up, and a broken/experimental sibling version never blocks the one you're building. Re-running the *same* version skips the CMake reconfigure and goes straight to an incremental `ninja`.
 
 ## 3. Benchmark cBLAS (correctness reference)
 
 `v0 -> cBLAS` (CPU). It is the **correctness ground truth** only (used to compute Average Error); it is far too slow to be a performance reference. Your own kernels start at `v1`.
+
+> Average Error = mean relative error `mean(|GT - C| / |GT|)`. Elements whose reference `GT` rounds to exactly `0` (rare cancellation, esp. in fp16) are skipped — relative error is undefined there — instead of producing `inf`. A kernel that writes `inf`/`nan` into `C` still fails the check.
 
 ### Using build script directly:
 ```bash
@@ -96,18 +98,21 @@ The run results will be automatically saved to `logs/` directory with timestamp 
 
 ## 3. Add Your Own Implementation
 
-Create a `.cu` file under directory "[./task-1/src](./src)" with any name you like, and implement a matmul function with macro `PLAYGROUND_MATMUL_DEC`.
+Create a `.cu` file **directly under the data-type directory** — `task-1/src/matmul_f16/` for fp16 (or `matmul_f32/` for fp32) — and implement the matmul template specialization with the macro `PLAYGROUND_MATMUL_DEC`.
 
-For example, add the following lines in "./task-1/src/xxx/xxx/f16-v2.cu" to provide the definition for function `matmul<float16_t, 2>`:
+> ⚠️ **Name the file with the version as `_vN`** (e.g. `matmul_f16_v2.cu` or `matmul_f16_v2_mykernel.cu`). The build selects the source for `--ver N` by that `_vN` token in the filename, so a file without it won't be picked up. The file must sit directly in the dtype dir (the source glob is non-recursive).
+
+For example, add the following in `task-1/src/matmul_f16/matmul_f16_v2_mykernel.cu` to define `matmul<float16_t, 2>`:
 
 ```cpp
-// @file: ./task-1/src/xxx/xxx/f16-v2.cu
+// @file: task-1/src/matmul_f16/matmul_f16_v2_mykernel.cu
 
 #include "playground/matmul.hpp"
 
 namespace playground {
-// Implement the matmul function with DType=float16_t and Version=2
-PLAYGROUND_MATMUL_DEC(float16_t, 2, A, B, C, M, N, K)
+// Implement matmul with DType=float16_t and Version=2.
+// Macro arg order is (DType, Version, m, n, k, A, B, C); A/B/C are device pointers.
+PLAYGROUND_MATMUL_DEC(float16_t, 2, m, n, k, A, B, C)
 {
     // ......
 }
@@ -115,7 +120,7 @@ PLAYGROUND_MATMUL_DEC(float16_t, 2, A, B, C, M, N, K)
 ```
 
 > 💡**Note**:  
-> Do not use version `0` — it is cBLAS (CPU), the correctness reference. Use version `1`, `2`, … for your own kernels.
+> Do not use version `0` — it is cBLAS (CPU), the correctness reference. Use version `1`, `2`, … for your own kernels. Each `(dtype, version)` must be defined exactly once (duplicate definitions of the same version collide at link time).
 
 Now you are able to build a new binary `task1_float16_v2` to with the following command:
 
