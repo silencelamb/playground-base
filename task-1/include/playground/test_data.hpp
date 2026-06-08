@@ -146,12 +146,13 @@ public:
     auto calculateAvgErr() -> float32_t
     {
         // Mean relative error: mean(|GT - C| / |GT|).
-        //  - A broken kernel that writes inf/nan into C is still caught (fails).
+        //  - A broken kernel that writes inf/nan into C is still caught
+        //  (fails).
         //  - Relative error is *undefined* where the reference GT is exactly 0
         //    (rare random cancellation, especially after rounding to fp16).
         //    Such terms are skipped instead of producing inf and aborting the
-        //    whole run. With no zero reference this yields the identical number
-        //    as the previous `errSum / _GT.size()` formula.
+        //    whole run. With no zero reference this yields the identical
+        //    number as the previous `errSum / _GT.size()` formula.
         float32_t errSum = 0.0F;
         size_t validCount = 0;
 
